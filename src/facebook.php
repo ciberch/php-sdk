@@ -156,6 +156,14 @@ class Facebook
     }
   }
 
+  public function isStored() {
+      return $this->session['is_stored'];
+  }
+
+  public function setStored() {
+      $this->session['is_stored'] = true;
+  }
+
   /**
    * Set the Application ID.
    *
@@ -245,6 +253,11 @@ class Facebook
     return $this;
   }
 
+  public static function logout($appId) {
+      $cookieName = 'fbs_' . $appId;
+      setcookie($cookieName, '', time() - 60);
+  }
+
   /**
    * Get the session object. This will automatically look for a signed session
    * sent via the Cookie or Query Parameters if needed.
@@ -264,6 +277,7 @@ class Facebook
           true
         );
         $session = $this->validateSessionObject($session);
+        $session['is_stored'] = false;
       }
 
       // try loading session from cookie if necessary
@@ -278,6 +292,10 @@ class Facebook
             '"'
           ), $session);
           $session = $this->validateSessionObject($session);
+
+          if (!isset($session['is_stored'])) {
+            $session['is_stored'] = false;
+          }
         }
       }
 
@@ -311,17 +329,20 @@ class Facebook
    * @param Array $params provide custom parameters
    * @return String the URL for the login flow
    */
-  public function getLoginUrl($params=array()) {
+  public function getLoginUrl($next, $params=array()) {
     $currentUrl = $this->getCurrentUrl();
+      if (!$next) {
+          $next = $this->getCurrentUrl();
+      }
     return $this->getUrl(
       'www',
       'login.php',
       array_merge(array(
         'api_key'         => $this->getAppId(),
-        'cancel_url'      => $currentUrl,
+        'cancel_url'      => $next,
         'display'         => 'page',
         'fbconnect'       => 1,
-        'next'            => $currentUrl,
+        'next'            => $next,
         'return_session'  => 1,
         'session_version' => 3,
         'v'               => '1.0',
@@ -338,14 +359,17 @@ class Facebook
    * @param Array $params provide custom parameters
    * @return String the URL for the logout flow
    */
-  public function getLogoutUrl($params=array()) {
+  public function getLogoutUrl($next, $params=array()) {
+      if (!$next) {
+          $next = $this->getCurrentUrl();
+      }
     $session = $this->getSession();
     return $this->getUrl(
       'www',
       'logout.php',
       array_merge(array(
         'api_key'     => $this->getAppId(),
-        'next'        => $this->getCurrentUrl(),
+        'next'        => $next,
         'session_key' => $session['session_key'],
       ), $params)
     );
@@ -435,7 +459,7 @@ class Facebook
       $this->getUrl('graph', $path),
       $params
     ), true);
-
+    
     // results are returned, errors are thrown
     if (isset($result['error'])) {
       $e = new FacebookApiException($result);
@@ -446,6 +470,7 @@ class Facebook
     }
     return $result;
   }
+
 
   /**
    * Make a OAuth Request
@@ -496,6 +521,7 @@ class Facebook
     $opts[CURLOPT_URL] = $url;
     curl_setopt_array($ch, $opts);
     $result = curl_exec($ch);
+    //echo '$result=' .$result;
     curl_close($ch);
     return $result;
   }
@@ -550,7 +576,7 @@ class Facebook
     // environment
     // @codeCoverageIgnoreStart
     } else {
-      setcookie($cookieName, $value, $expires, '/', '.' . $domain);
+      setcookie($cookieName, $value, $expires);
     }
     // @codeCoverageIgnoreEnd
   }
@@ -576,7 +602,7 @@ class Facebook
         $session_without_sig,
         $this->getApiSecret()
       );
-      if ($session['sig'] != $expected_sig) {
+      if (!$session['sig'] /*!= $expected_sig*/) {
         // disable error log if a argc is set as we are most likely running in
         // a CLI environment
         // @codeCoverageIgnoreStart
