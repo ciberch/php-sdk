@@ -1,7 +1,5 @@
 <?php
 
-require 'facebook.php';
-
 /**
  * @owner naitik
  * @emails naitik@facebook.com, platform-tests@lists.facebook.com
@@ -9,16 +7,15 @@ require 'facebook.php';
 
 class FacebookTest extends PHPUnit_Framework_TestCase
 {
-  const APP_ID = '184484190795';
-  const SECRET = 'fa16a3b5c96463dff7ef78d783b3025a';
+  const APP_ID = '254752073152';
+  const SECRET = '904270b68a2cc3d54485323652da4d14';
 
   private static $VALID_EXPIRED_SESSION = array(
-    'access_token' => '184484190795|2.URXMZJ2ScvREgjIWZDJw0w__.3600.1271761200-1677846385|Lh0GtsvNWbI4IyPXY3Fl6edU15k.',
-    'base_domain'  => 'fbrell.com',
-    'expires'      => '1271761200',
-    'secret'       => 'URXMZJ2ScvREgjIWZDJw0w__',
-    'session_key'  => '2.URXMZJ2ScvREgjIWZDJw0w__.3600.1271761200-1677846385',
-    'sig'          => '9fcbec631f4be7086f208990e145d06d',
+    'access_token' => '254752073152|2.I_eTFkcTKSzX5no3jI4r1Q__.3600.1273359600-1677846385|uI7GwrmBUed8seZZ05JbdzGFUpk.',
+    'expires'      => '1273359600',
+    'secret'       => '0d9F7pxWjM_QakY_51VZqw__',
+    'session_key'  => '2.I_eTFkcTKSzX5no3jI4r1Q__.3600.1273359600-1677846385',
+    'sig'          => '9f6ae89510b30dddb3f864f3caf32fb3',
     'uid'          => '1677846385',
   );
 
@@ -67,6 +64,15 @@ class FacebookTest extends PHPUnit_Framework_TestCase
     $facebook->setApiSecret('dummy');
     $this->assertEquals($facebook->getApiSecret(), 'dummy',
                         'Expect the API secret to be dummy.');
+  }
+
+  public function testDefaultBaseDomain() {
+    $facebook = new Facebook(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET,
+      'domain' => 'fbrell.com',
+    ));
+    $this->assertEquals($facebook->getBaseDomain(), 'fbrell.com');
   }
 
   public function testSetCookieSupport() {
@@ -154,7 +160,7 @@ class FacebookTest extends PHPUnit_Framework_TestCase
 
   public function testSessionFromQueryString() {
     // @style-override allow json_encode call
-    $_GET['session'] = json_encode(self::$VALID_EXPIRED_SESSION);
+    $_REQUEST['session'] = json_encode(self::$VALID_EXPIRED_SESSION);
     $facebook = new Facebook(array(
       'appId'  => self::APP_ID,
       'secret' => self::SECRET,
@@ -162,7 +168,7 @@ class FacebookTest extends PHPUnit_Framework_TestCase
 
     $this->assertEquals($facebook->getUser(), '1677846385',
                         'Expect uid back.');
-    unset($_GET['session']);
+    unset($_REQUEST['session']);
   }
 
   public function testInvalidSessionFromQueryString() {
@@ -237,28 +243,12 @@ class FacebookTest extends PHPUnit_Framework_TestCase
       $msg = 'Exception: 190: Invalid OAuth 2.0 Access Token';
       $this->assertEquals((string) $e, $msg,
                           'Expect the invalid session message.');
+
+      $result = $e->getResult();
+      $this->assertTrue(is_array($result), 'expect a result object');
+      $this->assertEquals('190', $result['error_code'], 'expect code');
     }
   }
-
-  /* reenable when oauth flow supports this
-  public function testAPIForceApplicationSecret() {
-    $facebook = new Facebook(array(
-      'appId'  => self::APP_ID,
-      'secret' => self::SECRET,
-    ));
-    $facebook->setSession(self::$VALID_EXPIRED_SESSION);
-    $response = $facebook->api(array(
-      'method' => 'fql.query',
-      'query' => 'SELECT name FROM profile WHERE id=4',
-      'ss' => '0', // without this, the call would fail with an
-                   // invalid session exception
-    ));
-    $this->assertEquals(count($response), 1,
-                        'Expect one row back.');
-    $this->assertEquals($response[0]['name'], 'Mark Zuckerberg',
-                        'Expect the name back.');
-  }
-  */
 
   public function testAPIGraphPublicData() {
     $facebook = new Facebook(array(
@@ -307,6 +297,41 @@ class FacebookTest extends PHPUnit_Framework_TestCase
       $this->assertEquals((string) $e, $msg,
                           'Expect the invalid session message.');
     }
+  }
+
+  public function testCurlFailure() {
+    $facebook = new Facebook(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET,
+    ));
+
+    try {
+      // we dont expect facebook will ever return in 1ms
+      Facebook::$CURL_OPTS[CURLOPT_TIMEOUT_MS] = 1;
+      $facebook->api('/naitik');
+    } catch(FacebookApiException $e) {
+      unset(Facebook::$CURL_OPTS[CURLOPT_TIMEOUT_MS]);
+      $this->assertEquals(
+        CURLE_OPERATION_TIMEOUTED, $e->getCode(), 'expect timeout');
+      $this->assertEquals('CurlException', $e->getType(), 'expect type');
+      return;
+    }
+
+    $this->fail('Should not get here.');
+  }
+
+  public function testGraphAPIWithOnlyParams() {
+    $facebook = new Facebook(array(
+      'appId'  => self::APP_ID,
+      'secret' => self::SECRET,
+    ));
+
+    $response = $facebook->api('/platform/feed', array('limit' => 1));
+    $this->assertEquals(1, count($response['data']), 'should get one entry');
+    $this->assertTrue(
+      strstr($response['paging']['next'], 'limit=1') !== false,
+      'expect the same limit back in the paging urls'
+    );
   }
 
   public function testLoginURLDefaults() {
@@ -434,7 +459,8 @@ class FacebookTest extends PHPUnit_Framework_TestCase
     }
 
     // @style-override allow json_encode call
-    $_GET['session'] = addslashes(json_encode(self::$VALID_EXPIRED_SESSION));
+    $_REQUEST['session'] = addslashes(
+      json_encode(self::$VALID_EXPIRED_SESSION));
     $facebook = new Facebook(array(
       'appId'  => self::APP_ID,
       'secret' => self::SECRET,
@@ -442,7 +468,7 @@ class FacebookTest extends PHPUnit_Framework_TestCase
 
     $this->assertEquals($facebook->getUser(), '1677846385',
                         'Expect uid back.');
-    unset($_GET['session']);
+    unset($_REQUEST['session']);
   }
 
   public function testMagicQuotesCookie() {
@@ -542,12 +568,13 @@ class FacebookTest extends PHPUnit_Framework_TestCase
     ini_set('arg_separator.output', '&');
   }
 
-  public function testDefaultBaseDomain() {
+  public function testAppSecretCall() {
     $facebook = new Facebook(array(
       'appId'  => self::APP_ID,
       'secret' => self::SECRET,
-      'domain' => 'fbrell.com',
     ));
-    $this->assertEquals($facebook->getBaseDomain(), 'fbrell.com');
+    $response = $facebook->api('/' . self::APP_ID . '/insights');
+    $this->assertTrue(count($response['data']) > 0,
+                      'Expect some data back.');
   }
 }

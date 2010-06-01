@@ -4,8 +4,8 @@ require '../src/facebook.php';
 
 // Create our Application instance.
 $facebook = new Facebook(array(
-  'appId'  => '184484190795',
-  'secret' => 'fa16a3b5c96463dff7ef78d783b3025a',
+  'appId'  => '254752073152',
+  'secret' => '904270b68a2cc3d54485323652da4d14',
   'cookie' => true,
 ));
 
@@ -41,7 +41,7 @@ $naitik = $facebook->api('/naitik');
 
 ?>
 <!doctype html>
-<html>
+<html xmlns:fb="http://www.facebook.com/2008/fbml">
   <head>
     <title>php-sdk</title>
     <style>
@@ -58,16 +58,52 @@ $naitik = $facebook->api('/naitik');
     </style>
   </head>
   <body>
-    <h1><a href="">php-sdk</a></h1>
+    <!--
+      We use the JS SDK to provide a richer user experience. For more info,
+      look here: http://github.com/facebook/connect-js
+    -->
+    <div id="fb-root"></div>
+    <script>
+      window.fbAsyncInit = function() {
+        FB.init({
+          appId   : '<?php echo $facebook->getAppId(); ?>',
+          session : <?php echo json_encode($session); ?>, // don't refetch the session when PHP already has it
+          status  : true, // check login status
+          cookie  : true, // enable cookies to allow the server to access the session
+          xfbml   : true // parse XFBML
+        });
+
+        // whenever the user logs in, we refresh the page
+        FB.Event.subscribe('auth.login', function() {
+          window.location.reload();
+        });
+      };
+
+      (function() {
+        var e = document.createElement('script');
+        e.src = document.location.protocol + '//connect.facebook.net/en_US/all.js';
+        e.async = true;
+        document.getElementById('fb-root').appendChild(e);
+      }());
+    </script>
+
+
+    <h1><a href="example.php">php-sdk</a></h1>
 
     <?php if ($me): ?>
     <a href="<?php echo $logoutUrl; ?>">
       <img src="http://static.ak.fbcdn.net/rsrc.php/z2Y31/hash/cxrz4k7j.gif">
     </a>
     <?php else: ?>
-    <a href="<?php echo $loginUrl; ?>">
-      <img src="http://static.ak.fbcdn.net/rsrc.php/zB6N8/hash/4li2k73z.gif">
-    </a>
+    <div>
+      Using JavaScript &amp; XFBML: <fb:login-button></fb:login-button>
+    </div>
+    <div>
+      Without using JavaScript &amp; XFBML:
+      <a href="<?php echo $loginUrl; ?>">
+        <img src="http://static.ak.fbcdn.net/rsrc.php/zB6N8/hash/4li2k73z.gif">
+      </a>
+    </div>
     <?php endif ?>
 
     <h3>Session</h3>
@@ -80,7 +116,7 @@ $naitik = $facebook->api('/naitik');
 
     <h3>Your User Object</h3>
     <pre><?php print_r($me); ?></pre>
-<?php else: ?>
+    <?php else: ?>
     <strong><em>You are not Connected.</em></strong>
     <?php endif ?>
 

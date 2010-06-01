@@ -77,6 +77,11 @@ class FacebookApiException extends Exception
 class Facebook
 {
   /**
+   * Version.
+   */
+  const VERSION = '2.0.3';
+
+  /**
    * Default options for curl.
    */
   public static $CURL_OPTS = array(
@@ -138,7 +143,7 @@ class Facebook
    * Initialize a Facebook Application.
    *
    * The configuration:
-   * - appId: the application API key
+   * - appId: the application ID
    * - secret: the application secret
    * - cookie: (optional) boolean true to enable cookie support
    * - domain: (optional) domain for the cookie
@@ -167,7 +172,7 @@ class Facebook
   /**
    * Set the Application ID.
    *
-   * @param String $appId the API key
+   * @param String $appId the Application ID
    */
   public function setAppId($appId) {
     $this->appId = $appId;
@@ -175,9 +180,9 @@ class Facebook
   }
 
   /**
-   * Get the API Key.
+   * Get the Application ID.
    *
-   * @return String the API key
+   * @return String the Application ID
    */
   public function getAppId() {
     return $this->appId;
@@ -244,12 +249,16 @@ class Facebook
    * Set the Session.
    *
    * @param Array $session the session
+   * @param Boolean $write_cookie indicate if a cookie should be written. this
+   * value is ignored if cookie support has been disabled.
    */
-  public function setSession($session=null) {
+  public function setSession($session=null, $write_cookie=true) {
     $session = $this->validateSessionObject($session);
     $this->sessionLoaded = true;
     $this->session = $session;
-    $this->setCookieFromSession($session);
+    if ($write_cookie) {
+      $this->setCookieFromSession($session);
+    }
     return $this;
   }
 
@@ -267,13 +276,14 @@ class Facebook
   public function getSession() {
     if (!$this->sessionLoaded) {
       $session = null;
+      $write_cookie = true;
 
-      // try loading session from $_GET
-      if (isset($_GET['session'])) {
+      // try loading session from $_REQUEST
+      if (isset($_REQUEST['session'])) {
         $session = json_decode(
           get_magic_quotes_gpc()
-            ? stripslashes($_GET['session'])
-            : $_GET['session'],
+            ? stripslashes($_REQUEST['session'])
+            : $_REQUEST['session'],
           true
         );
         $session = $this->validateSessionObject($session);
@@ -296,10 +306,13 @@ class Facebook
           if (!isset($session['is_stored'])) {
             $session['is_stored'] = false;
           }
+          // write only if we need to delete a invalid session cookie
+          $write_cookie = empty($session);
+
         }
       }
 
-      $this->setSession($session);
+      $this->setSession($session, $write_cookie);
     }
 
     return $this->session;
@@ -425,7 +438,7 @@ class Facebook
   protected function _restserver($params) {
     // generic application level parameters
     $params['api_key'] = $this->getAppId();
-    $params['format'] = 'json';
+    $params['format'] = 'json-strings';
 
     $result = json_decode($this->_oauthRequest(
       $this->getApiUrl($params['method']),
@@ -433,7 +446,7 @@ class Facebook
     ), true);
 
     // results are returned, errors are thrown
-    if (isset($result['error_code'])) {
+    if (is_array($result) && isset($result['error_code'])) {
       throw new FacebookApiException($result);
     }
     return $result;
@@ -461,7 +474,7 @@ class Facebook
     ), true);
     
     // results are returned, errors are thrown
-    if (isset($result['error'])) {
+    if (is_array($result) && isset($result['error'])) {
       $e = new FacebookApiException($result);
       if ($e->getType() === 'OAuthException') {
         $this->setSession(null);
@@ -487,8 +500,7 @@ class Facebook
       if ($session) {
         $params['access_token'] = $session['access_token'];
       } else {
-        // TODO (naitik) sync with abanker
-        //$params['access_token'] = $this->getAppId() .'|'. $this->getApiSecret();
+        $params['access_token'] = $this->getAppId() .'|'. $this->getApiSecret();
       }
     }
 
@@ -517,11 +529,22 @@ class Facebook
     }
 
     $opts = self::$CURL_OPTS;
-    $opts[CURLOPT_POSTFIELDS] = http_build_query($params, null, '&');
+    $opts[CURLOPT_POSTFIELDS] = $params;
     $opts[CURLOPT_URL] = $url;
     curl_setopt_array($ch, $opts);
     $result = curl_exec($ch);
-    //echo '$result=' .$result;
+
+    if ($result === false) {
+      $e = new FacebookApiException(array(
+        'error_code' => curl_errno($ch),
+        'error'      => array(
+          'message' => curl_error($ch),
+          'type'    => 'CurlException',
+        ),
+      ));
+      curl_close($ch);
+      throw $e;
+    }
     curl_close($ch);
     return $result;
   }
@@ -558,16 +581,20 @@ class Facebook
       $expires = $session['expires'];
     }
 
+    // prepend dot if a domain is found
+    if ($domain) {
+      $domain = '.' . $domain;
+    }
+
     // if an existing cookie is not set, we dont need to delete it
     if ($value == 'deleted' && empty($_COOKIE[$cookieName])) {
       return;
     }
 
     if (headers_sent()) {
-      // disable error log if a argc is set as we are most likely running in a
-      // CLI environment
+      // disable error log if we are running in a CLI environment
       // @codeCoverageIgnoreStart
-      if (!array_key_exists('argc', $_SERVER)) {
+      if (php_sapi_name() != 'cli') {
         error_log('Could not set cookie. Headers already sent.');
       }
       // @codeCoverageIgnoreEnd
@@ -576,7 +603,7 @@ class Facebook
     // environment
     // @codeCoverageIgnoreStart
     } else {
-      setcookie($cookieName, $value, $expires);
+      setcookie($cookieName, $value, $expires, '/', $domain);
     }
     // @codeCoverageIgnoreEnd
   }
@@ -606,7 +633,7 @@ class Facebook
         // disable error log if a argc is set as we are most likely running in
         // a CLI environment
         // @codeCoverageIgnoreStart
-        if (!array_key_exists('argc', $_SERVER)) {
+        if (php_sapi_name() != 'cli') {
           error_log('Got invalid session signature in cookie.');
         }
         // @codeCoverageIgnoreEnd
