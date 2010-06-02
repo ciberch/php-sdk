@@ -262,9 +262,11 @@ class Facebook
     return $this;
   }
 
-  public static function logout($appId) {
-      $cookieName = 'fbs_' . $appId;
-      setcookie($cookieName, '', time() - 60);
+  /**
+   * Logs the user out of the app
+   */
+  public function logout() {
+      $this->set_fb_cookie('', time() - 60);
   }
 
   /**
@@ -555,7 +557,7 @@ class Facebook
    * @return String the cookie name
    */
   protected function getSessionCookieName() {
-    return 'fbs_' . $this->getAppId();
+    return 'monfb_' . $this->getAppId();
   }
 
   /**
@@ -568,27 +570,35 @@ class Facebook
     if (!$this->useCookieSupport()) {
       return;
     }
-
-    $cookieName = $this->getSessionCookieName();
+    
     $value = 'deleted';
     $expires = time() - 3600;
-    $domain = $this->getBaseDomain();
+    
     if ($session) {
       $value = '"' . http_build_query($session, null, '&') . '"';
-      if (isset($session['base_domain'])) {
-        $domain = $session['base_domain'];
-      }
       $expires = $session['expires'];
+    }
+
+    // if an existing cookie is not set, we dont need to delete it
+    if ($value == 'deleted' && empty($_COOKIE[$this->getSessionCookieName()])) {
+      return;
+    }
+    $this->set_fb_cookie($value, $expires);
+
+  }
+
+  private function set_fb_cookie($value, $expires) {
+    $cookieName = $this->getSessionCookieName();
+
+    $domain = $this->getBaseDomain();
+
+    if (isset($session['base_domain'])) {
+      $domain = $session['base_domain'];
     }
 
     // prepend dot if a domain is found
     if ($domain) {
       $domain = '.' . $domain;
-    }
-
-    // if an existing cookie is not set, we dont need to delete it
-    if ($value == 'deleted' && empty($_COOKIE[$cookieName])) {
-      return;
     }
 
     if (headers_sent()) {
@@ -599,11 +609,11 @@ class Facebook
       }
       // @codeCoverageIgnoreEnd
 
-    // ignore for code coverage as we will never be able to setcookie in a CLI
-    // environment
-    // @codeCoverageIgnoreStart
+      // ignore for code coverage as we will never be able to setcookie in a CLI
+      // environment
+      // @codeCoverageIgnoreStart
     } else {
-      setcookie($cookieName, $value, $expires, '/', $domain);
+      setcookie($cookieName, $value, $expires);
     }
     // @codeCoverageIgnoreEnd
   }
