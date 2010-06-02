@@ -103,15 +103,21 @@ class FacebookMultiUser extends Facebook {
     curl_multi_close($this->mch);
   }
 
-  public function getUserChanges($id, $fields, $access_token) {
+  public function getUserChanges($id, $fields, $access_token, $since) {
     $params = array(
       'access_token'  => $access_token,
       'fields'        => $fields,
-      'method'        => 'GET'
+      'method'        => 'GET',
+      'since'         => $since // this needs to be in GMT
     );
 
     $url = parent::getUrl('graph', '/' . $id . '/');
-    $this->makeMultiRequest($id, $url,  $params);
+
+    debug_rlog($url);
+    debug_rlog('fields=' . $fields . ' since=' . $since);
+
+    $key = implode(";", array($id, $fields, $since));
+    $this->makeMultiRequest($key, $url,  $params);
   }
 
 
@@ -126,6 +132,7 @@ class FacebookMultiUser extends Facebook {
 
     curl_multi_add_handle($this->mch, $ch);
     curl_multi_exec($this->mch, $active);
+
     $this->handles[$id] = $ch;
   }
 
