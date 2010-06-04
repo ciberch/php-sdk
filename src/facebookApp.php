@@ -152,13 +152,15 @@ class FacebookMultiUser extends Facebook {
    * This method fires an async request for the user data.
    * Call it as many times as needed and then call storeResults
    *
-   * @param double $id Facebook user id
+   * @param double $id identifier for the http request
+   * @param double $fb_user_id Facebook user id
    * @param string $fields Comma delimited list of fields
    * @param string $access_token for the user
    * @param string $since  A string containing a date which can be parsed by
    * strtotime(). All the results returned will have occurred after that date.
    */
-  public function getUserChanges($id, $fields, $access_token, $since) {
+  public function getUserChanges($id, $fb_user_id, $fields, $access_token,
+          $since) {
     $params = array(
       'access_token'  => $access_token,
       'fields'        => $fields,
@@ -166,10 +168,9 @@ class FacebookMultiUser extends Facebook {
       'since'         => $since // this needs to be in GMT
     );
 
-    $url = parent::getUrl('graph', '/' . $id . '/');
+    $url = parent::getUrl('graph', '/' . $fb_user_id . '/');
 
-    $key = implode(";", array($id, $fields, $since));
-    $this->make_multi_request($key, $url,  $params);
+    $this->make_multi_request($id, $url,  $params);
   }
 
   /**
